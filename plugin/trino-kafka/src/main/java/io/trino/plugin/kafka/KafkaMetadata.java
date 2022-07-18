@@ -155,8 +155,14 @@ public class KafkaMetadata
             }
         });
 
+        boolean hasKey = kafkaTopicDescription.getKey().isPresent();
         for (KafkaInternalFieldManager.InternalField kafkaInternalField : kafkaInternalFieldManager.getInternalFields().values()) {
-            columnHandles.put(kafkaInternalField.getColumnName(), kafkaInternalField.getColumnHandle(index.getAndIncrement(), hideInternalColumns));
+            columnHandles.put(
+                    kafkaInternalField.getColumnName(),
+                    kafkaInternalField.getColumnHandle(
+                            index.getAndIncrement(),
+                            (hasKey || !kafkaInternalField.getColumnName().equals(KafkaInternalFieldManager.KEY_FIELD))
+                                    && hideInternalColumns));
         }
 
         return columnHandles.buildOrThrow();
@@ -218,8 +224,11 @@ public class KafkaMetadata
             }
         });
 
+        boolean hasKey = table.getKey().isPresent();
         for (KafkaInternalFieldManager.InternalField fieldDescription : kafkaInternalFieldManager.getInternalFields().values()) {
-            builder.add(fieldDescription.getColumnMetadata(hideInternalColumns));
+            builder.add(fieldDescription.getColumnMetadata(
+                    (hasKey || !fieldDescription.getColumnName().equals(KafkaInternalFieldManager.KEY_FIELD))
+                    && hideInternalColumns));
         }
 
         return new ConnectorTableMetadata(schemaTableName, builder.build());
@@ -273,10 +282,11 @@ public class KafkaMetadata
         if (retryMode != NO_RETRIES) {
             throw new TrinoException(NOT_SUPPORTED, "This connector does not support query retries");
         }
+
         // TODO: support transactional inserts https://github.com/trinodb/trino/issues/4303
         KafkaTableHandle table = (KafkaTableHandle) tableHandle;
         List<KafkaColumnHandle> actualColumns = table.getColumns().stream()
-                .filter(columnHandle -> !columnHandle.isInternal() && !columnHandle.isHidden())
+                .filter(columnHandle -> !columnHandle.isHidden())
                 .collect(toImmutableList());
 
         checkArgument(columns.equals(actualColumns), "Unexpected columns!\nexpected: %s\ngot: %s", actualColumns, columns);

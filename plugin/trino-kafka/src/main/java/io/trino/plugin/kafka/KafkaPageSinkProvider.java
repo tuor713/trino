@@ -64,7 +64,7 @@ public class KafkaPageSinkProvider
         ImmutableList.Builder<EncoderColumnHandle> keyColumns = ImmutableList.builder();
         ImmutableList.Builder<EncoderColumnHandle> messageColumns = ImmutableList.builder();
         handle.getColumns().forEach(col -> {
-            if (col.isInternal()) {
+            if (col.isInternal() && !col.getName().equals(KafkaInternalFieldManager.KEY_FIELD)) {
                 throw new IllegalArgumentException(format("unexpected internal column '%s'", col.getName()));
             }
             if (col.isKeyCodec()) {
@@ -78,12 +78,14 @@ public class KafkaPageSinkProvider
         RowEncoder keyEncoder = encoderFactory.create(
                 session,
                 handle.getKeyDataFormat(),
+                handle.getKeySubject(),
                 getDataSchema(handle.getKeyDataSchemaLocation()),
                 keyColumns.build());
 
         RowEncoder messageEncoder = encoderFactory.create(
                 session,
                 handle.getMessageDataFormat(),
+                handle.getMessageSubject(),
                 getDataSchema(handle.getMessageDataSchemaLocation()),
                 messageColumns.build());
 

@@ -35,9 +35,9 @@ public class DispatchingRowEncoderFactory
         this.factories = ImmutableMap.copyOf(requireNonNull(factories, "factories is null"));
     }
 
-    public RowEncoder create(ConnectorSession session, String dataFormat, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles)
+    public RowEncoder create(ConnectorSession session, String dataFormat, Optional<String> subject, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles)
     {
         checkArgument(factories.containsKey(dataFormat), "unknown data format '%s'", dataFormat);
-        return factories.get(dataFormat).create(session, dataSchema, columnHandles);
+        return factories.get(dataFormat).create(session, subject, dataSchema, columnHandles);
     }
 }

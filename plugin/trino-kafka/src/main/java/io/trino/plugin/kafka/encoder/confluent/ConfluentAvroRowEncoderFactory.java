@@ -11,22 +11,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.plugin.kafka.encoder.raw;
+package io.trino.plugin.kafka.encoder.confluent;
 
+import io.confluent.kafka.schemaregistry.client.SchemaMetadata;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException;
 import io.trino.plugin.kafka.encoder.EncoderColumnHandle;
 import io.trino.plugin.kafka.encoder.RowEncoder;
 import io.trino.plugin.kafka.encoder.RowEncoderFactory;
 import io.trino.spi.connector.ConnectorSession;
+import org.apache.avro.Schema;
 
+import javax.inject.Inject;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
-public class RawRowEncoderFactory
+public class ConfluentAvroRowEncoderFactory
         implements RowEncoderFactory
 {
+    private SchemaRegistryClient client;
+
+    @Inject
+    public ConfluentAvroRowEncoderFactory(SchemaRegistryClient client)
+    {
+        this.client = client;
+    }
+
     @Override
     public RowEncoder create(ConnectorSession session, Optional<String> subject, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles)
     {
-        return new RawRowEncoder(session, columnHandles);
+        try {
+            SchemaMetadata meta = client.getLatestSchemaMetadata(subject.orElseThrow());
+            Schema schema = new Schema.Parser().parse(meta.getSchema());
+            return new ConfluentAvroRowEncoder(session, columnHandles, schema, meta.getId());
+        }
+        catch (IOException | RestClientException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

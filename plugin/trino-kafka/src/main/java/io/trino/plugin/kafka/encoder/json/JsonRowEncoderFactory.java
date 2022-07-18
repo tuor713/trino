@@ -38,7 +38,7 @@ public class JsonRowEncoderFactory
     }
 
     @Override
-    public RowEncoder create(ConnectorSession session, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles)
+    public RowEncoder create(ConnectorSession session, Optional<String> subject, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles)
     {
         return new JsonRowEncoder(session, columnHandles, objectMapper);
     }

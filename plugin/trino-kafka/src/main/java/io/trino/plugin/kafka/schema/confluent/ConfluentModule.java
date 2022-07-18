@@ -36,10 +36,11 @@ import io.trino.plugin.base.session.SessionPropertiesProvider;
 import io.trino.plugin.kafka.encoder.DispatchingRowEncoderFactory;
 import io.trino.plugin.kafka.encoder.RowEncoderFactory;
 import io.trino.plugin.kafka.encoder.avro.AvroRowEncoder;
+import io.trino.plugin.kafka.encoder.confluent.ConfluentAvroRowEncoderFactory;
+import io.trino.plugin.kafka.encoder.dummy.DummyRowEncoderFactory;
 import io.trino.plugin.kafka.schema.ContentSchemaReader;
 import io.trino.plugin.kafka.schema.TableDescriptionSupplier;
 import io.trino.spi.HostAddress;
-import io.trino.spi.TrinoException;
 
 import javax.inject.Singleton;
 
@@ -54,7 +55,6 @@ import static com.google.inject.multibindings.MapBinder.newMapBinder;
 import static com.google.inject.multibindings.Multibinder.newSetBinder;
 import static io.airlift.configuration.ConfigBinder.configBinder;
 import static io.trino.plugin.kafka.encoder.EncoderModule.encoderFactory;
-import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
 import static java.util.Objects.requireNonNull;
 
 public class ConfluentModule
@@ -125,9 +125,8 @@ public class ConfluentModule
         public void configure(Binder binder)
         {
             MapBinder<String, RowEncoderFactory> encoderFactoriesByName = encoderFactory(binder);
-            encoderFactoriesByName.addBinding(AvroRowEncoder.NAME).toInstance((session, dataSchema, columnHandles) -> {
-                throw new TrinoException(NOT_SUPPORTED, "Insert not supported");
-            });
+            encoderFactoriesByName.addBinding(AvroRowEncoder.NAME).to(ConfluentAvroRowEncoderFactory.class).in(SINGLETON);
+            encoderFactoriesByName.addBinding(DummyRowDecoder.NAME).to(DummyRowEncoderFactory.class).in(SINGLETON);
             binder.bind(DispatchingRowEncoderFactory.class).in(SINGLETON);
         }
     }

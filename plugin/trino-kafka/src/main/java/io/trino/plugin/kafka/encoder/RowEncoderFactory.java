@@ -20,5 +20,5 @@ import java.util.Optional;
 
 public interface RowEncoderFactory
 {
-    RowEncoder create(ConnectorSession session, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles);
+    RowEncoder create(ConnectorSession session, Optional<String> subject, Optional<String> dataSchema, List<EncoderColumnHandle> columnHandles);
 }

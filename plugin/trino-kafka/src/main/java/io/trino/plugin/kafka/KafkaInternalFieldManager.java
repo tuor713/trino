@@ -115,7 +115,7 @@ public class KafkaInternalFieldManager
                     null,
                     null,
                     null,
-                    false,
+                    getColumnName().equals(KEY_FIELD),
                     hidden,
                     true);
         }
