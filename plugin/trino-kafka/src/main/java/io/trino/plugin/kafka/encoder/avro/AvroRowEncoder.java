@@ -40,6 +40,8 @@ import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
 
+import javax.validation.ValidationException;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -74,7 +76,7 @@ public class AvroRowEncoder
     private final ByteArrayOutputStream byteArrayOutputStream;
     protected final Schema parsedSchema;
     private final DataFileWriter<GenericRecord> dataFileWriter;
-    protected final GenericRecord record;
+    protected GenericRecord record;
 
     public AvroRowEncoder(ConnectorSession session, List<EncoderColumnHandle> columnHandles, Schema parsedSchema)
     {
@@ -232,8 +234,7 @@ public class AvroRowEncoder
                 for (Object colVal : (List) value) {
                     encoder.appendColumnValue(colVal);
                 }
-                encoder.resetColumnIndex();
-                return encoder.record;
+                return encoder.reset();
             };
         }
         else if (schema.getType() == Schema.Type.BYTES) {
@@ -310,6 +311,10 @@ public class AvroRowEncoder
         // make sure entire row has been updated with new values
         checkArgument(currentColumnIndex == columnHandles.size(), format("Missing %d columns", columnHandles.size() - currentColumnIndex));
 
+        if (!GenericData.get().validate(record.getSchema(), record)) {
+            throw new ValidationException("Record " + record + " does not match schema " + record.getSchema());
+        }
+
         try {
             byteArrayOutputStream.reset();
             dataFileWriter.create(parsedSchema, byteArrayOutputStream);
@@ -385,6 +390,14 @@ public class AvroRowEncoder
             throw new UnsupportedOperationException(format("Unsupported type '%s' for column '%s'", type, columnHandles.get(currentColumnIndex).getName()));
         }
         currentColumnIndex++;
+    }
+
+    public GenericRecord reset()
+    {
+        resetColumnIndex();
+        GenericRecord result = record;
+        record = new GenericData.Record(parsedSchema);
+        return result;
     }
 
     @Override

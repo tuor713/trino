@@ -36,12 +36,18 @@ import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
 import org.testng.annotations.Test;
 
+import javax.validation.ValidationException;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
+import static org.testng.Assert.assertEquals;
 
 public class TestAvroEncoder
 {
@@ -133,6 +139,24 @@ public class TestAvroEncoder
                     BlockBuilder fEnum = pb.getBlockBuilder(0);
                     VarcharType.VARCHAR.writeString(fEnum, "ALPHA");
                     encoder.appendColumnValue(fEnum, 0);
+                });
+    }
+
+    @Test(expectedExceptions = ValidationException.class)
+    public void testNotNullSchemaEnforcement() throws Exception
+    {
+        Schema schema = SchemaBuilder
+                .builder()
+                .record("test")
+                .fields()
+                .name("fString").type().stringType().noDefault()
+                .endRecord();
+
+        testSchemaConversion(schema,
+                (pb, encoder) -> {
+                    BlockBuilder fString = pb.getBlockBuilder(0);
+                    fString.appendNull();
+                    encoder.appendColumnValue(fString, 0);
                 });
     }
 
@@ -260,6 +284,43 @@ public class TestAvroEncoder
     }
 
     @Test
+    public void testArrayOfRecords() throws Exception
+    {
+        Schema schema = SchemaBuilder.builder()
+                .record("test")
+                .fields()
+                .name("fRecArray")
+                .type()
+                .array()
+                .items(SchemaBuilder.builder().record("innerAr").fields().requiredInt("fArInt").endRecord())
+                .noDefault()
+                .endRecord();
+
+        testSchemaConversion(schema,
+                (pb, encoder) -> {
+                    BlockBuilder fRecArBlock = pb.getBlockBuilder(0);
+                    BlockBuilder fRecArSub = fRecArBlock.beginBlockEntry();
+                    SingleRowBlockWriter fRowBuilder = (SingleRowBlockWriter) fRecArSub.beginBlockEntry();
+                    fRowBuilder.getFieldBlockBuilder(0).writeInt(1000);
+                    fRecArSub.closeEntry();
+
+                    fRowBuilder = (SingleRowBlockWriter) fRecArSub.beginBlockEntry();
+                    fRowBuilder.getFieldBlockBuilder(0).writeInt(2000);
+                    fRecArSub.closeEntry();
+
+                    fRecArBlock.closeEntry();
+                    encoder.appendColumnValue(fRecArBlock, 0);
+                },
+                (rec) -> {
+                    List<Integer> entries = ((List<GenericRecord>) rec.get("fRecArray"))
+                            .stream()
+                            .map(r -> (Integer) r.get("fArInt"))
+                            .collect(Collectors.toList());
+                    assertEquals(List.of(1000, 2000), entries);
+                });
+    }
+
+    @Test
     public void testMapOfBytes() throws Exception
     {
         Schema schema = SchemaBuilder
@@ -288,6 +349,11 @@ public class TestAvroEncoder
     }
 
     private void testSchemaConversion(Schema schema, BiConsumer<PageBuilder, RowEncoder> dataGen) throws Exception
+    {
+        testSchemaConversion(schema, dataGen, (rec) -> {});
+    }
+
+    private void testSchemaConversion(Schema schema, BiConsumer<PageBuilder, RowEncoder> dataGen, Consumer<GenericRecord> validator) throws Exception
     {
         System.out.println("Schema >> " + schema);
 
@@ -326,5 +392,7 @@ public class TestAvroEncoder
         DataFileReader<GenericRecord> dfReader = new DataFileReader<GenericRecord>(file, reader);
         GenericRecord record = dfReader.next();
         System.out.println("Record >> " + record);
+
+        validator.accept(record);
     }
 }

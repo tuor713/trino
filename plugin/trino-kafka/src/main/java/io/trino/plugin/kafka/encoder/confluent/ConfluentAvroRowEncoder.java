@@ -17,9 +17,12 @@ import io.trino.plugin.kafka.encoder.EncoderColumnHandle;
 import io.trino.plugin.kafka.encoder.avro.AvroRowEncoder;
 import io.trino.spi.connector.ConnectorSession;
 import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.io.BinaryEncoder;
 import org.apache.avro.io.EncoderFactory;
+
+import javax.validation.ValidationException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -41,6 +44,10 @@ public class ConfluentAvroRowEncoder
     public byte[] toByteArray()
     {
         try {
+            if (!GenericData.get().validate(record.getSchema(), record)) {
+                throw new ValidationException("Record " + record + " does not match schema " + record.getSchema());
+            }
+
             ByteArrayOutputStream bout = new ByteArrayOutputStream();
             bout.write(0);
             bout.write(ByteBuffer.allocate(4).putInt(schemaId).array());
