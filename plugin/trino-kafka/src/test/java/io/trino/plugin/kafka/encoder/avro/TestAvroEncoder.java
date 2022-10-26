@@ -14,9 +14,13 @@
 package io.trino.plugin.kafka.encoder.avro;
 
 import io.airlift.slice.Slices;
+import io.confluent.kafka.schemaregistry.avro.AvroSchema;
+import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.trino.plugin.kafka.KafkaColumnHandle;
 import io.trino.plugin.kafka.encoder.EncoderColumnHandle;
 import io.trino.plugin.kafka.encoder.RowEncoder;
+import io.trino.plugin.kafka.encoder.confluent.ConfluentAvroRowEncoderFactory;
 import io.trino.plugin.kafka.schema.confluent.AvroSchemaConverter;
 import io.trino.spi.PageBuilder;
 import io.trino.spi.block.Block;
@@ -34,6 +38,7 @@ import org.apache.avro.SchemaBuilder;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import javax.validation.ValidationException;
@@ -53,6 +58,20 @@ public class TestAvroEncoder
 {
     private static final ConnectorSession SESSION = TestingConnectorSession.builder().build();
     private static final AvroRowEncoderFactory ENCODER_FACTORY = new AvroRowEncoderFactory();
+
+    private static final SchemaRegistryClient REGISTRY_CLIENT = new MockSchemaRegistryClient();
+    private static final ConfluentAvroRowEncoderFactory CONFLUENT_ENCODER_FACTORY = new ConfluentAvroRowEncoderFactory(REGISTRY_CLIENT);
+
+    @BeforeClass
+    public static void setup()
+    {
+        try {
+            REGISTRY_CLIENT.register("string-schema", new AvroSchema(SchemaBuilder.builder().stringType().toString()));
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Test
     public void testComplexSchema() throws Exception
@@ -348,6 +367,62 @@ public class TestAvroEncoder
                 });
     }
 
+    @Test
+    public void testStringKeyEncoding()
+    {
+        Schema schema = SchemaBuilder.builder().stringType();
+        AvroSchemaConverter converter = new AvroSchemaConverter(new TestingTypeManager(), AvroSchemaConverter.EmptyFieldStrategy.IGNORE);
+        List<Type> types = converter.convertAvroSchema(schema);
+
+        List<EncoderColumnHandle> columns = new ArrayList<>();
+        columns.add(new KafkaColumnHandle(
+                "subject-key",
+                types.get(0),
+                "subject-key",
+                null,
+                null,
+                true,
+                false,
+                false));
+
+        RowEncoder encoder = ENCODER_FACTORY.create(SESSION, Optional.of("subject-key"), Optional.of(schema.toString()), columns);
+
+        PageBuilder pb = new PageBuilder(types);
+        BlockBuilder bb = pb.getBlockBuilder(0);
+        VarcharType.VARCHAR.writeString(bb, "my test string");
+        encoder.appendColumnValue(bb, 0);
+
+        encoder.toByteArray();
+    }
+
+    @Test
+    public void testConfluentStringKeyEncoding()
+    {
+        Schema schema = SchemaBuilder.builder().stringType();
+        AvroSchemaConverter converter = new AvroSchemaConverter(new TestingTypeManager(), AvroSchemaConverter.EmptyFieldStrategy.IGNORE);
+        List<Type> types = converter.convertAvroSchema(schema);
+
+        List<EncoderColumnHandle> columns = new ArrayList<>();
+        columns.add(new KafkaColumnHandle(
+                "subject-key",
+                types.get(0),
+                "subject-key",
+                null,
+                null,
+                true,
+                false,
+                false));
+
+        RowEncoder encoder = CONFLUENT_ENCODER_FACTORY.create(SESSION, Optional.of("string-schema"), Optional.of(schema.toString()), columns);
+
+        PageBuilder pb = new PageBuilder(types);
+        BlockBuilder bb = pb.getBlockBuilder(0);
+        VarcharType.VARCHAR.writeString(bb, "my test string");
+        encoder.appendColumnValue(bb, 0);
+
+        assertEquals(encoder.toByteArray().length, 20);
+    }
+
     private void testSchemaConversion(Schema schema, BiConsumer<PageBuilder, RowEncoder> dataGen) throws Exception
     {
         testSchemaConversion(schema, dataGen, (rec) -> {});
@@ -383,15 +458,18 @@ public class TestAvroEncoder
         byte[] bytes = encoder.toByteArray();
         System.out.println("Bytes >> " + bytes.length);
 
-        File file = new File("test.bin");
+        File dir = new File(".");
+        File file = File.createTempFile("test", "bin", dir);
         FileOutputStream fos = new FileOutputStream(file);
         fos.write(bytes);
         fos.close();
 
         GenericDatumReader<GenericRecord> reader = new GenericDatumReader<>(schema);
-        DataFileReader<GenericRecord> dfReader = new DataFileReader<GenericRecord>(file, reader);
+        DataFileReader<GenericRecord> dfReader = new DataFileReader<>(file, reader);
         GenericRecord record = dfReader.next();
         System.out.println("Record >> " + record);
+
+        file.delete();
 
         validator.accept(record);
     }

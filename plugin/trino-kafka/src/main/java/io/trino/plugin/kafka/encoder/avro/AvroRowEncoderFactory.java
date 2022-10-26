@@ -32,6 +32,12 @@ public class AvroRowEncoderFactory
     {
         checkArgument(dataSchema.isPresent(), "dataSchema for Avro format is not present");
         Schema parsedSchema = new Schema.Parser().parse(dataSchema.get());
-        return new AvroRowEncoder(session, columnHandles, parsedSchema);
+
+        if (parsedSchema.getType() != Schema.Type.RECORD) {
+            return new AvroSingleColumnRowEncoder(session, columnHandles, parsedSchema);
+        }
+        else {
+            return new AvroRowEncoder(session, columnHandles, parsedSchema);
+        }
     }
 }

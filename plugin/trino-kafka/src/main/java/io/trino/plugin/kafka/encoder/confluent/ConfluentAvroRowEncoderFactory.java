@@ -45,7 +45,12 @@ public class ConfluentAvroRowEncoderFactory
         try {
             SchemaMetadata meta = client.getLatestSchemaMetadata(subject.orElseThrow());
             Schema schema = new Schema.Parser().parse(meta.getSchema());
-            return new ConfluentAvroRowEncoder(session, columnHandles, schema, meta.getId());
+            if (schema.getType() != Schema.Type.RECORD) {
+                return new ConfluentAvroSingleColumnRowEncoder(session, columnHandles, schema, meta.getId());
+            }
+            else {
+                return new ConfluentAvroRowEncoder(session, columnHandles, schema, meta.getId());
+            }
         }
         catch (IOException | RestClientException e) {
             throw new RuntimeException(e);
