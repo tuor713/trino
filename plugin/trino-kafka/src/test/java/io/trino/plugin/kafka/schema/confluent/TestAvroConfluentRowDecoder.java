@@ -117,6 +117,36 @@ public class TestAvroConfluentRowDecoder
         testSingleValueRow(rowDecoder, 3L, schema, 1);
     }
 
+    @Test
+    public void testNullRow()
+            throws Exception
+    {
+        MockSchemaRegistryClient mockSchemaRegistryClient = new MockSchemaRegistryClient();
+        Schema schema = SchemaBuilder.record(TOPIC)
+                .fields()
+                .name("col1").type().intType().noDefault()
+                .name("col2").type().stringType().noDefault()
+                .name("col3").type().intType().intDefault(42)
+                .name("col4").type().nullable().intType().noDefault()
+                .name("col5").type().nullable().bytesType().noDefault()
+                .endRecord();
+
+        mockSchemaRegistryClient.register(TOPIC + "-value", schema);
+
+        Set<DecoderColumnHandle> columnHandles = ImmutableSet.<DecoderColumnHandle>builder()
+                .add(new KafkaColumnHandle("col1", INTEGER, "col1", null, null, false, false, false))
+                .add(new KafkaColumnHandle("col2", VARCHAR, "col2", null, null, false, false, false))
+                .add(new KafkaColumnHandle("col3", INTEGER, "col3", null, null, false, false, false))
+                .add(new KafkaColumnHandle("col4", INTEGER, "col4", null, null, false, false, false))
+                .add(new KafkaColumnHandle("col5", VARBINARY, "col5", null, null, false, false, false))
+                .add(new KafkaColumnHandle("col6", BIGINT, "col6", null, null, false, false, false))
+                .build();
+
+        RowDecoder rowDecoder = getRowDecoder(mockSchemaRegistryClient, columnHandles, schema);
+        Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodedRow = rowDecoder.decodeRow(new byte[0]);
+        assertTrue(decodedRow.isEmpty());
+    }
+
     private static void testRow(RowDecoder rowDecoder, GenericRecord record, int schemaId)
     {
         byte[] serializedRecord = serializeRecord(record, record.getSchema(), schemaId);

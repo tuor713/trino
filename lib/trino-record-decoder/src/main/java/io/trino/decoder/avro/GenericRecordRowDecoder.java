@@ -46,6 +46,11 @@ class GenericRecordRowDecoder
     @Override
     public Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodeRow(byte[] data)
     {
+        // null entry in key gets translated to empty array by KafkaRecordSet
+        if (data.length == 0) {
+            return Optional.empty();
+        }
+
         GenericRecord avroRecord = deserializer.deserialize(data);
         return Optional.of(columnDecoders.stream()
                 .collect(toImmutableMap(Map.Entry::getKey, entry -> entry.getValue().decodeField(avroRecord))));

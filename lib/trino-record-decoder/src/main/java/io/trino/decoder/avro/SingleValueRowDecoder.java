@@ -38,6 +38,11 @@ class SingleValueRowDecoder
     @Override
     public Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodeRow(byte[] data)
     {
+        // null entry in key gets translated to empty array by KafkaRecordSet
+        if (data.length == 0) {
+            return Optional.empty();
+        }
+
         Object avroValue = deserializer.deserialize(data);
         return Optional.of(ImmutableMap.of(column, new AvroColumnDecoder.ObjectValueProvider(avroValue, column.getType(), column.getName())));
     }
